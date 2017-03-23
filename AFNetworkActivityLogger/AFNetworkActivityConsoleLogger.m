@@ -74,6 +74,9 @@
                 break;
         }
     } else {
+        
+        [self logTaskToFile:task withResponseObject:responseObject];
+
         switch (self.level) {
             case AFLoggerLevelDebug:
                 NSLog(@"%ld '%@' [%.04f s]: %@ %@", (long)responseStatusCode, [[task.response URL] absoluteString], elapsedTime, responseHeaderFields, responseObject);
@@ -87,4 +90,83 @@
     }
 }
 
+- (void)logTaskToFile:(NSURLSessionTask *)task withResponseObject:(id)responseObject {
+
+    NSURL *url = [task.response URL];
+
+    NSString *folderName = [self getFolderNameForURL:url];
+
+    NSString *folderComponent = [NSString stringWithFormat:@"Documents/%@", folderName];
+
+    NSString *folder =  [NSHomeDirectory() stringByAppendingPathComponent:folderComponent];
+
+    [[NSFileManager defaultManager] createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:nil];
+
+    // NSTimeInterval is defined as double
+    NSTimeInterval timeStamp = [[NSDate date] timeIntervalSince1970];
+
+    NSString *timeStampString = [[NSNumber numberWithDouble:timeStamp] stringValue];
+    NSString *responseJsonFileName = [NSString stringWithFormat:@"response_%@.json", timeStampString];
+    NSString *requestJsonFileName = [NSString stringWithFormat:@"request_%@.json", timeStampString];
+
+
+    NSString *responseJSONPath = [folder stringByAppendingPathComponent:responseJsonFileName];
+
+    if (responseObject) {
+        NSString *responseString = [NSString stringWithFormat:@"%@", responseObject];
+        
+        NSString *prettyResponseString = [self convertToPrettyJSON:responseString];
+
+        [prettyResponseString writeToFile:responseJSONPath
+                               atomically:YES
+                                 encoding:NSUTF8StringEncoding
+                                    error:NULL];
+    }
+
+
+    if (task.originalRequest.HTTPBody) {
+
+        NSString *requestJSONPath = [folder stringByAppendingPathComponent:requestJsonFileName];
+
+        NSData *requestBodyData = task.originalRequest.HTTPBody;
+
+        NSData *requestPrettyData = [self getPrettyDataFromRequestData:requestBodyData];
+
+        [requestPrettyData writeToFile:requestJSONPath
+                            atomically:YES];
+    }
+
+}
+
+- (NSData *)getPrettyDataFromRequestData:(NSData *)requestBodyData {
+//data --> NSDictionary --> pretty json
+    NSDictionary *requestDictionary = [NSJSONSerialization JSONObjectWithData:requestBodyData options:0 error:nil];
+    NSData *requestPrettyData = [NSJSONSerialization dataWithJSONObject:requestDictionary options:NSJSONWritingPrettyPrinted error:nil];
+    return requestPrettyData;
+}
+
+- (NSString *)convertToPrettyJSON:(NSString *)responseString {
+    NSDictionary *prettyResponseDictionary = [NSJSONSerialization JSONObjectWithData:[responseString dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+
+    if (!prettyResponseDictionary) {
+        return responseString;
+    }
+
+    NSData *jsonData =
+            [NSJSONSerialization dataWithJSONObject:prettyResponseDictionary
+                                            options:NSJSONWritingPrettyPrinted
+                                              error:nil];
+    NSString *prettyResponseString =
+            [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+    return prettyResponseString;
+}
+
+- (NSString *)getFolderNameForURL:(NSURL *)url {
+    NSString *host = [url host];
+    NSString *path = [url path];
+
+    //compose folder name
+    NSString *folderName = [NSString stringWithFormat:@"%@_%@", host, [path stringByReplacingOccurrencesOfString:@"/" withString:@"_"]];
+    return folderName;
+}
 @end
