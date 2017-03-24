@@ -112,8 +112,21 @@
 
     NSString *responseJSONPath = [folder stringByAppendingPathComponent:responseJsonFileName];
 
-    if (responseObject) {
+    if (responseObject && [responseObject respondsToSelector:@selector(jsonObject)]) {
+        
         NSString *responseString = [NSString stringWithFormat:@"%@", responseObject];
+        
+        NSDictionary *jsonObject = [responseObject performSelector:@selector(jsonObject)];
+        
+        if (jsonObject && [jsonObject isKindOfClass:[NSDictionary class]]) {
+            NSError *error;
+            NSData *jsonData = [NSJSONSerialization dataWithJSONObject:jsonObject
+                                                               options:NSJSONWritingPrettyPrinted
+                                                                 error:&error];
+            
+            responseString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+        }
+        
         
         NSString *prettyResponseString = [self convertToPrettyJSON:responseString];
 
